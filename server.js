@@ -4,7 +4,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // --- CẤU HÌNH ---
-const HISTORY_API_URL = 'https://paks-owyr.onrender.com/api/taixiumd5';
+const HISTORY_API_URL = 'https://jaa-0pqn.onrender.com/api/taixiumd5';
 let cachedConfidence = null;
 let cachedSession = null;
 
@@ -121,5 +121,6 @@ app.listen(PORT,()=>console.log(`Server đang chạy trên cổng ${PORT}`));
 
 
   
+
 
 
