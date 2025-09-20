@@ -8,61 +8,86 @@ const HISTORY_API_URL = 'https://jaa-0pqn.onrender.com/api/taixiumd5';
 let cachedConfidence = null;
 let cachedSession = null;
 
-// --- MẪU CẦU TT/XX ---
-const mau_cau_xau = [
-  "TXXTX","TXTXT","XXTXX","XTXTX","TTXTX",
-  "XTTXT","TXXTT","TXTTX","XXTTX","XTXTT",
-  "TXTXX","XXTXT","TTXXT","TXTTT","XTXTX",
-  "XTXXT","XTTTX","TTXTT","XTXTT","TXXTX"
-];
+// --- THƯ VIỆN 60 LOẠI CẦU VÀ TRỌNG SỐ ---
+const MAU_CAU_LIBRARY = {
+  // Cầu bệt (trọng số cao)
+  "TTTT": 3, "TTTTT": 4, "TTTTTT": 5,
+  "XXXX": 3, "XXXXX": 4, "XXXXXX": 5,
 
-const mau_cau_dep = [
-  "TTTTT","XXXXX","TTTXX","XXTTT","TXTXX",
-  "TTTXT","XTTTX","TXXXT","XXTXX","TXTTT",
-  "XTTTT","TTXTX","TXXTX","TXTXT","XTXTX",
-  "TTTXT","XTTXT","TXTXT","XXTXX","TXXXX"
-];
+  // Cầu đảo (1-1, 2-2,...)
+  "TXTXT": 2, "XTXTX": 2,
+  "TTXXTT": 3, "XXTTXX": 3,
+  "TTTXXX": 4, "XXXTTT": 4,
+  "TTTTXXXX": 5, "XXXXTTTT": 5,
+  "TTTTTXXXXX": 6, "XXXXXTTTTT": 6,
+
+  // Cầu xen kẽ phức tạp
+  "TXXTXX": 2, "XTTXTT": 2, "TXXTXT": 1, "XTTXTTX": 1,
+  "TTXTXT": 1, "XXTXTX": 1, "TXTTXX": -1, "XTTXTT": -1,
+  "TTXTT": 1, "XXTXX": 1, "TTXXT": -1, "XXTTX": -1,
+  "TXXTT": -2, "XTTXX": -2,
+
+  // Cầu "dây" hoặc "gián đoạn"
+  "TTXT": -1, "TXXT": -1, "XXTX": -1,
+  "TXXXT": -2, "TTXXT": -2, "TTTXXT": -3,
+  "XXTTX": -2, "XXXTTX": -3, "TTTX": -1, "XXXT": -1,
+
+  // Cầu "lộn xộn" hoặc "không rõ ràng" (trọng số âm)
+  "TXXTX": -3, "TXTTX": -3, "XXTXX": -3, "XTXTX": -3,
+  "TTXTX": -2, "XTTXT": -2, "TXXTT": -2, "TXTTT": -2,
+  "XXTTX": -3, "XTXTT": -3, "TXTXX": -3, "XXTXT": -3,
+  "TTXXT": -2, "TXXXX": -4, "XTTTT": -4, "TXTTX": -3,
+  "XTXXT": -3, "XTTTX": -3, "TTXTT": -2, "XTXTT": -3
+};
 
 // --- HÀM HỖ TRỢ ---
-function getRandomConfidence() {
-  return (Math.random() * (90-40) + 40).toFixed(2) + "%";
+function getConfidence(weight) {
+  let baseConfidence = 50;
+  if (weight > 5) {
+    baseConfidence = 75 + Math.min(weight * 2, 15);
+  } else if (weight < -5) {
+    baseConfidence = 25 + Math.max(weight * 2, -15);
+  } else {
+    baseConfidence = 50 + Math.random() * 10 - 5;
+  }
+  return baseConfidence.toFixed(2) + "%";
 }
 
-function isCauXau(cauStr) {
-  return mau_cau_xau.includes(cauStr);
-}
+function getBasePrediction(history) {
+  if (!history || history.length === 0) return null;
 
-function isCauDep(cauStr) {
-  return mau_cau_dep.includes(cauStr);
-}
-
-// Dự đoán phiên tiếp theo dựa trên xí ngầu cuối + TT/XX
-function predictNext(history, cau) {
-  if (!history || history.length === 0) return "Đợi thêm dữ liệu";
-  
   const lastDice = [history[0].Xuc_xac_1, history[0].Xuc_xac_2, history[0].Xuc_xac_3];
-  const total = lastDice[0]+lastDice[1]+lastDice[2];
+  const total = lastDice.reduce((a, b) => a + b, 0);
 
   let resultList = [];
-  const weights = [0.5,0.3,0.2];
-  for (let i=0;i<3;i++){
-    let tmp = lastDice[i]+total;
-    if(tmp===4 || tmp===5) tmp-=4;
-    else if(tmp>=6) tmp-=6;
-    let val = tmp%2===0 ? "Tài":"Xỉu";
-    for(let j=0;j<weights[i]*10;j++) resultList.push(val);
-  }
-  let pred = resultList.sort((a,b)=>
-    resultList.filter(v=>v===a).length - resultList.filter(v=>v===b).length
-  ).pop();
-
-  // Xử lý cầu TT/XX
-  const cau5 = cau.slice(-5).join('');
-  if(isCauXau(cau5)){
-    pred = pred==="Tài"?"Xỉu":"Tài";
+  const weights = [0.5, 0.3, 0.2];
+  for (let i = 0; i < 3; i++) {
+    let tmp = lastDice[i] + total;
+    if (tmp === 4 || tmp === 5) tmp -= 4;
+    else if (tmp >= 6) tmp -= 6;
+    let val = tmp % 2 === 0 ? "Tài" : "Xỉu";
+    for (let j = 0; j < weights[i] * 10; j++) resultList.push(val);
   }
 
-  return pred;
+  let counts = { "Tài": 0, "Xỉu": 0 };
+  resultList.forEach(v => counts[v]++);
+  return counts["Tài"] >= counts["Xỉu"] ? "Tài" : "Xỉu";
+}
+
+function analyzeMauCau(cauHistory) {
+  let totalWeight = 0;
+  const recentHistory = cauHistory.join('');
+
+  for (const pattern in MAU_CAU_LIBRARY) {
+    let startIndex = 0;
+    while (true) {
+      const foundIndex = recentHistory.indexOf(pattern, startIndex);
+      if (foundIndex === -1) break;
+      totalWeight += MAU_CAU_LIBRARY[pattern];
+      startIndex = foundIndex + 1;
+    }
+  }
+  return totalWeight;
 }
 
 // --- ENDPOINT DỰ ĐOÁN ---
@@ -77,13 +102,36 @@ app.get('/api/2k15', async (req,res)=>{
 
     if(cachedSession !== currentData.Phien){
       cachedSession = currentData.Phien;
-      cachedConfidence = getRandomConfidence();
+      cachedConfidence = null;
     }
 
-    // Lấy 5 cầu gần nhất từ lịch sử kết quả
-    let cau = data.slice(0,5).map(d=>d.Ket_qua==="Tài"?"T":"X");
+    // Lấy 15 cầu gần nhất từ lịch sử kết quả để phân tích
+    let cauHistory = data.slice(0,15).map(d=>d.Ket_qua==="Tài"?"T":"X");
+    
+    // Bước 1: Dự đoán cơ sở
+    const basePrediction = getBasePrediction(data);
 
-    const du_doan = predictNext(data, cau);
+    // Bước 2: Phân tích cầu và tính trọng số
+    const totalWeight = analyzeMauCau(cauHistory);
+
+    // Bước 3: Đưa ra quyết định cuối cùng dựa trên trọng số
+    let finalPrediction;
+    let explanation;
+    
+    if (totalWeight > 5) {
+      finalPrediction = basePrediction;
+      explanation = "Cầu đẹp, xu hướng ổn định. Nên vào tiền.";
+    } else if (totalWeight < -5) {
+      finalPrediction = basePrediction === "Tài" ? "Xỉu" : "Tài";
+      explanation = "Cầu đang gãy! Đảo ngược dự đoán.";
+    } else {
+      finalPrediction = basePrediction;
+      explanation = "Cầu không rõ ràng, tiềm ẩn rủi ro.";
+    }
+
+    if (!cachedConfidence) {
+      cachedConfidence = getConfidence(totalWeight);
+    }
 
     res.json({
       id: "@cskhtoollxk",
@@ -92,11 +140,11 @@ app.get('/api/2k15', async (req,res)=>{
       tong_xuc_xac: currentData.Tong,
       ket_qua: currentData.Ket_qua,
       phien_sau: nextSession,
-      du_doan,
+      du_doan: finalPrediction,
       do_tin_cay: cachedConfidence,
-      giai_thich: "nhin địt mẹ m"
+      giai_thich: explanation
     });
-
+    
   }catch(err){
     console.error(err.message);
     res.status(500).json({
@@ -114,13 +162,4 @@ app.get('/',(req,res)=>{
 });
 
 app.listen(PORT,()=>console.log(`Server đang chạy trên cổng ${PORT}`));
-
-
-
-
-
-
-  
-
-
-
+        
